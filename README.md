@@ -1,4 +1,4 @@
-# Redis Clone in Go
+# Redis-like Database (Work in Progress) in Go
 
 A Redis-like in-memory key-value store built from scratch in Go as part of a systems programming course.
 
