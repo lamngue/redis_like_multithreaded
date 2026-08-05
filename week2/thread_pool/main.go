@@ -16,7 +16,6 @@ func worker(jobs <-chan net.Conn) {
 }
 
 func main() {
-	// Create a thread pool with 5 workers
 	port := ":8080"
 	listener, err := net.Listen("tcp", port)
 	if err != nil {
