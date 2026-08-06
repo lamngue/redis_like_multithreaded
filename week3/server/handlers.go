@@ -2,7 +2,7 @@ package server
 
 import "fmt"
 
-func ExecuteCommand(req *Request) (string, error) {
+func ExecuteCommand(req *Request) (*Response, error) {
 	switch req.Command {
 	case "PING":
 		return handlePing()
@@ -11,36 +11,45 @@ func ExecuteCommand(req *Request) (string, error) {
 	case "GET":
 		return handleGet(req)
 	default:
-		return "", fmt.Errorf("ERR unknown command")
+		return &Response{}, fmt.Errorf("ERR unknown command")
 	}
 }
 
 var store = map[string]string{}
 
-func handleSet(req *Request) (string, error) {
+func handleSet(req *Request) (*Response, error) {
 	if len(req.Args) != 2 {
-		return "", fmt.Errorf("SET command requires 2 arguments")
+		return nil, fmt.Errorf("SET command requires 2 arguments")
 	}
 
 	key := req.Args[0]
 	value := req.Args[1]
 
 	store[key] = value
-	return "OK", nil
+	return &Response{
+		Type:  BulkStringRes,
+		Value: "OK",
+	}, nil
 }
 
-func handleGet(req *Request) (string, error) {
+func handleGet(req *Request) (*Response, error) {
 	if len(req.Args) != 1 {
-		return "", fmt.Errorf("GET command requires 1 argument")
+		return nil, fmt.Errorf("GET command requires 1 argument")
 	}
 	value, ok := store[req.Args[0]]
 	if !ok {
-		return "", fmt.Errorf("key not found")
+		return nil, fmt.Errorf("key not found")
 	}
 
-	return value, nil
+	return &Response{
+		Type:  BulkStringRes,
+		Value: value,
+	}, nil
 }
 
-func handlePing() (string, error) {
-	return "PONG", nil
+func handlePing() (*Response, error) {
+	return &Response{
+		Type:  BulkStringRes,
+		Value: "PONG",
+	}, nil
 }

@@ -124,16 +124,17 @@ func (s *Server) handleClientEvent(event syscall.EpollEvent) {
 		// close socket
 		syscall.Close(int(event.Fd))
 	}
-	fmt.Printf("Read %d bytes from fd %d: %s\n", n, event.Fd, string(buf[:n]))
+	fmt.Printf("Read %d bytes from fd %d: %q\n", n, event.Fd, string(buf[:n]))
 	message := string(buf[:n])
-	req, err := ParseRequest(message)
+	req, err := ParseRESP([]byte(message))
 	if err != nil {
 		fmt.Printf("Error parsing request: %v\n", err)
 	}
 
-	res, err := ExecuteCommand(req)
+	res, err := ExecuteCommand(req.Request)
+	bytes, err := EncodeResponse(res, err)
 	// send response back to client
-	_, err = syscall.Write(int(event.Fd), []byte(res+"\n"))
+	_, err = syscall.Write(int(event.Fd), bytes)
 	if err != nil {
 		fmt.Printf("Error writing response: %v\n", err)
 	}
