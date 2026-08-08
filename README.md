@@ -25,8 +25,8 @@ This repo will document my progress so far (currently week 4 - parsing RESP).
 
 
 # Week 1 - Thread-safe Counter
-Why do I neeed a mutex? To prevent multiple threads from changing or reading the same data at the same time. (avoiding race conditions and data corruptions)
-What race condition am I preventing? Multiple threads (goroutine) are trying to increment a counter value
+Why do I neeed a mutex? To prevent multiple threads from changing or reading the same data at the same time. (avoiding race conditions and data corruptions) <br>
+What race condition am I preventing? Multiple threads (goroutine) are trying to increment a counter value <br>
 Why do I need a WaitGroup? To manage the goroutines running. The `Add(1)` method is used to start a new goroutine, `Wait()` ensures that the main goroutine waits for all other goroutines to finish before it proceeds, `Done()` is called when a goroutine is finished.
 
 ## Objective
@@ -65,8 +65,8 @@ Expected Output:
 
 # Week 2 - TCP Servers
 
-What happens when a client connects? The server listens for incoming TCP connections
-Why does `go handleConnection(conn)` allow multiple clients? The `go` keyword starts the function in a new goroutine. This allows the main loop to listening for another client via `Accept()`
+What happens when a client connects? The server listens for incoming TCP connections <br>
+Why does `go handleConnection(conn)` allow multiple clients? The `go` keyword starts the function in a new goroutine. This allows the main loop to listening for another client via `Accept()` <br>
 
 ## 1. Goroutine-per-Connection Server
 
@@ -113,11 +113,11 @@ Lam
 ```
 ## 2. Worker Pool TCP Server
 ---
-What problem does the worker pool solve? To prevent creating a new goroutine for every connection
-What is the producer and what is the consumer? Producer - generate jobs (in this case incoming connections). Consumer - fixed number of goroutines pulling elements from the jobs channel.
-Implemented an alternative server architecture using a fixed-size worker pool.
+What problem does the worker pool solve? To prevent creating a new goroutine for every connection <br>
+What is the producer and what is the consumer? Producer - generate jobs (in this case incoming connections). Consumer - fixed number of goroutines pulling elements from the jobs channel. <br>
+Implemented an alternative server architecture using a fixed-size worker pool. <br>
 
-Instead of creating a new goroutine for every connection, incoming client connections are placed onto a shared job queue and processed by a fixed number of worker goroutines.
+Instead of creating a new goroutine for every connection, incoming client connections are placed onto a shared job queue and processed by a fixed number of worker goroutines. <br>
 
 ### Concepts Covered
 
@@ -148,13 +148,13 @@ Handle Connections
 ```
 ---
 # Week 3 - I/O Multiplexing
-What exactly is a file descriptor? File descriptors (FDs) are part of the POSIX API and use basic integers to determine state. It is a handle to access IO/file resource at kernel level.
-What does epoll_create1() create? It creates a new epoll instance in the Linux kernel and returns an integer file descriptor referring to that instance.
-Why do I register the listener with epoll? To bypass the kernel-level blocking behavior of synchronous I/O.
-Why does epoll_wait() tell me which sockets are ready?
-Why don't I need a goroutine per connection?
-What's the difference between the listener FD and a client FD?
-What happens when read() returns 0?
+What exactly is a file descriptor? File descriptors (FDs) are part of the POSIX API and use basic integers to determine state. It is a handle to access IO/file resource at kernel level. <br>
+What does epoll_create1() create? It creates a new epoll instance in the Linux kernel and returns an integer file descriptor referring to that instance. <br>
+Why do I register the listener with epoll? To bypass the kernel-level blocking behavior of synchronous I/O. <br>
+Why does epoll_wait() tell me which sockets are ready? <br>
+Why don't I need a goroutine per connection? <br>
+What's the difference between the listener FD and a client FD? <br>
+What happens when read() returns 0? <br>
 
 ## Objective
 
