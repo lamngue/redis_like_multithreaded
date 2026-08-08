@@ -1,13 +1,10 @@
-# Redis-like Database (Work in Progress) in Go
+# Redis Clone in Go
 
-A Redis-like in-memory key-value database built from scratch in Go as part of a systems programming learning project.
+## What is this?
 
-The goal of this project is to understand how high-performance, concurrent servers work internally by implementing the core building blocks from scratch, including synchronization, networking, concurrency, operating system I/O, protocol parsing, and data storage.
-
-Rather than relying entirely on Go's high-level networking abstractions, parts of the project explore lower-level Linux APIs such as `epoll` to understand how event-driven servers manage large numbers of connections efficiently.
-
----
-
+This project purpose is to (attempt to) create a redis-like in-memory key-value database from scratch using Golang.
+I want to understand how high-performance and concurrent server works internally by implementing synchronization, networking, concurrency, operating system I/O, protocol parsing, and data storage from scratch.
+This repo will document my progress so far (currently week 4 - parsing RESP).
 ## Project Roadmap
 
 - [x] Thread-safe counter using `sync.Mutex`
@@ -26,9 +23,11 @@ Rather than relying entirely on Go's high-level networking abstractions, parts o
 - [ ] Persistence (RDB)
 - [ ] Replication
 
----
 
-# Week 1 – Thread-safe Counter
+# Week 1 - Thread-safe Counter
+Why do I neeed a mutex? To prevent multiple threads from changing or reading the same data at the same time. (avoiding race conditions and data corruptions)
+What race condition am I preventing? Multiple threads (goroutine) are trying to increment a counter value
+Why do I need a WaitGroup? To manage the goroutines running. The `Add(1)` method is used to start a new goroutine, `Wait()` ensures that the main goroutine waits for all other goroutines to finish before it proceeds, `Done()` is called when a goroutine is finished.
 
 ## Objective
 
@@ -62,16 +61,12 @@ Running the demo launches 100 goroutines, each incrementing the shared counter o
 Expected Output:
 100
 ```
-
 ---
 
-# Week 2 – TCP Servers
+# Week 2 - TCP Servers
 
-## Objective
-
-Learn how concurrent network servers work by implementing two different TCP server architectures.
-
----
+What happens when a client connects? The server listens for incoming TCP connections
+Why does `go handleConnection(conn)` allow multiple clients? The `go` keyword starts the function in a new goroutine. This allows the main loop to listening for another client via `Accept()`
 
 ## 1. Goroutine-per-Connection Server
 
@@ -116,11 +111,10 @@ OK
 GET name
 Lam
 ```
-
----
-
 ## 2. Worker Pool TCP Server
-
+---
+What problem does the worker pool solve? To prevent creating a new goroutine for every connection
+What is the producer and what is the consumer? Producer - generate jobs (in this case incoming connections). Consumer - fixed number of goroutines pulling elements from the jobs channel.
 Implemented an alternative server architecture using a fixed-size worker pool.
 
 Instead of creating a new goroutine for every connection, incoming client connections are placed onto a shared job queue and processed by a fixed number of worker goroutines.
@@ -152,10 +146,15 @@ W1 W2 W3 W4
  ▼  ▼  ▼  ▼
 Handle Connections
 ```
-
 ---
-
-# Week 3 – I/O Multiplexing Server (`epoll`)
+# Week 3 - I/O Multiplexing
+What exactly is a file descriptor? File descriptors (FDs) are part of the POSIX API and use basic integers to determine state. It is a handle to access IO/file resource at kernel level.
+What does epoll_create1() create? It creates a new epoll instance in the Linux kernel and returns an integer file descriptor referring to that instance.
+Why do I register the listener with epoll? To bypass the kernel-level blocking behavior of synchronous I/O.
+Why does epoll_wait() tell me which sockets are ready?
+Why don't I need a goroutine per connection?
+What's the difference between the listener FD and a client FD?
+What happens when read() returns 0?
 
 ## Objective
 
@@ -237,7 +236,7 @@ Unlike the previous TCP servers, the event-driven server does not create a gorou
 
 ---
 
-# Week 4 – Redis Serialization Protocol (RESP)
+# Week 4 - RESP
 
 ## Objective
 
@@ -382,105 +381,6 @@ The response layer supports:
 
 ---
 
-## Request / Response Architecture
-
-The server now follows a layered request lifecycle:
-
-```text
-             TCP Socket
-                 │
-                 ▼
-          syscall.Read()
-                 │
-                 ▼
-            RESP Parser
-                 │
-                 ▼
-              Request
-                 │
-                 ▼
-         ExecuteCommand()
-                 │
-                 ▼
-             Response
-                 │
-                 ▼
-          RESP Encoder
-                 │
-                 ▼
-          syscall.Write()
-                 │
-                 ▼
-              Client
-```
-
-This separates four responsibilities:
-
-1. Networking
-2. Protocol parsing
-3. Command execution
-4. Protocol serialization
-
----
-
-## Redis CLI Integration
-
-The server can now communicate with `redis-cli` using RESP.
-
-When `redis-cli` connects, Redis protocol requests such as:
-
-```text
-*2\r\n$7\r\nCOMMAND\r\n$4\r\nDOCS\r\n
-```
-
-can be received and parsed by the server.
-
-The implementation also demonstrates how Redis clients may automatically send capability/discovery commands such as:
-
-```text
-COMMAND DOCS
-INFO SERVER
-COMMAND
-```
-
-during client initialization.
-
-Not all Redis commands are implemented yet, so unsupported commands return an error response.
-
----
-
-## TCP Framing Limitation
-
-The current implementation provides basic RESP parsing but does not yet implement full per-client input buffering.
-
-TCP is a byte stream and does not guarantee that one `read()` call corresponds to exactly one Redis command.
-
-For example, a command could arrive as:
-
-```text
-Read 1:
-
-*3\r\n$3\r\nSE
-```
-
-followed by:
-
-```text
-Read 2:
-
-T\r\n$4\r\nname\r\n...
-```
-
-Similarly, multiple commands could arrive in a single read.
-
-A future milestone will introduce per-client buffers to correctly handle:
-
-- Partial requests
-- Multiple requests in one read
-- Pipelined Redis commands
-
----
-
 # Project Structure
 
 ```text
@@ -575,7 +475,7 @@ GET name
 
 ---
 
-# What I'm Learning
+# What I'm Learning so far
 
 This repository documents my progress building a Redis-like database while exploring the systems concepts behind high-performance network servers.
 
