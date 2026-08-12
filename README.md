@@ -149,12 +149,12 @@ Handle Connections
 ---
 # Week 3 - I/O Multiplexing
 What exactly is a file descriptor? File descriptors (FDs) are part of the POSIX API and use basic integers to determine state. It is a handle to access IO/file resource at kernel level. <br>
-What does epoll_create1() create? It creates a new epoll instance in the Linux kernel and returns an integer file descriptor referring to that instance. <br>
+What does `epoll_create1()` create? It creates a new epoll instance in the Linux kernel and returns an integer file descriptor referring to that instance. <br>
 Why do I register the listener with epoll? To bypass the kernel-level blocking behavior of synchronous I/O. <br>
-Why does epoll_wait() tell me which sockets are ready?  So the program can process active connections instantly without wasting CPU time checking thousands of idle sockets one by one <br>
+Why does `epoll_wait()` tell me which sockets are ready?  So the program can process active connections instantly without wasting CPU time checking thousands of idle sockets one by one <br>
 Why don't I need a goroutine per connection? One single thread or loop uses `epoll` to watch many connections at the same time and only wakes up when a connection is actually ready to read or write data <br>
 What's the difference between the listener FD and a client FD? Listener FD accepts incoming connection requests from a specific port, client FD is the active, dedicated data channel created for a specific, connected client <br>
-What happens when read() returns 0? The end-of-file (EOF) has been reached <br>
+What happens when `read()` returns 0? The end-of-file (EOF) has been reached <br>
 
 ## Objective
 
