@@ -4,7 +4,7 @@
 
 This project purpose is to (attempt to) create a redis-like in-memory key-value database from scratch using Golang.
 I want to understand how high-performance and concurrent server works internally by implementing synchronization, networking, concurrency, operating system I/O, protocol parsing, and data storage from scratch.
-This repo will document my progress so far (currently week 4 - parsing RESP).
+This repo will document my progress so far (currently week 5 - TTL and thread-safe storage).
 ## Project Roadmap
 
 - [x] Thread-safe counter using `sync.Mutex`
@@ -18,8 +18,8 @@ This repo will document my progress so far (currently week 4 - parsing RESP).
 - [x] Basic `redis-cli` communication
 - [ ] Per-client buffering / partial TCP reads
 - [ ] Concurrent queue
-- [ ] Concurrent key-value store (`sync.RWMutex`)
-- [ ] Key expiration (TTL)
+- [x] Concurrent key-value store (`sync.RWMutex`)
+- [x] Key expiration (TTL)
 - [ ] Persistence (RDB)
 - [ ] Replication
 
@@ -381,8 +381,280 @@ The response layer supports:
 
 ---
 
-# Project Structure
+# Week 5 - Key Expiration and Thread-Safe Store
 
+## Objective
+
+Extend the Redis-like server with key expiration and a thread-safe in-memory key-value store.
+
+The main goals were:
+
+- Add key expiration using TTL
+- Implement `EXPIRE`, `TTL`, `EXISTS`, and `DEL`
+- Automatically remove expired keys when they are accessed
+- Protect the shared key-value store from concurrent access using `sync.RWMutex`
+- Separate command handling from storage and synchronization logic
+
+---
+
+## Key Expiration
+
+The original key-value store only stored a string value:
+
+```text
+key -> value
+```
+To support expiration, each key now stores an Entry containing both its value and an expiration timestamp.
+
+```text
+type Entry struct {
+    Value     string
+    ExpiresAt int64
+}
+```
+ExpiresAt stores a Unix timestamp in seconds.
+
+A value of 0 means that the key does not expire.
+
+Conceptually:
+
+```text
+key
+ │
+ ▼
+Entry
+ ├── Value
+ └── ExpiresAt
+```
+---
+## Lazy Expiration
+
+The server uses lazy expiration.
+
+Instead of continuously scanning the entire key-value store, the server checks whether a key has expired when it is accessed.
+
+For example:
+```text
+SET name Lam
+EXPIRE name 5
+```
+After five seconds, the key is considered expired.
+
+When a command accesses the key:
+
+```text
+Access key
+    │
+    ▼
+Does it exist?
+    │
+    ▼
+Has it expired?
+   / \
+ yes  no
+  │    │
+  ▼    ▼
+delete return
+  │    key
+  ▼
+not found
+```
+Expired entries are removed from the store when they are detected.
+
+This behavior is used by commands such as `GET`, `EXISTS`, `TTL`, `EXPIRE`, and `DEL`.
+
+---
+## Supported Commands
+### `EXPIRE`
+
+Sets an expiration time for an existing key.
+```text
+EXPIRE name 10
+```
+Returns:
+```text
+(integer) 1
+```
+if the expiration was successfully set, or:
+```text
+(integer) 0
+```
+if the key does not exist.
+
+Calling `EXPIRE` again replaces the previous expiration time.
+---
+### TTL
+
+Returns the remaining lifetime of a key in seconds.
+```text
+TTL name
+```
+The implementation uses:
+```text
+-1 -> key exists but has no expiration
+-2 -> key does not exist or has expired
+N  -> approximately N seconds remaining
+```
+Example:
+```text
+SET name Lam
+EXPIRE name 10
+TTL name
+```
+The returned value decreases as time passes.
+---
+### EXISTS
+
+Checks whether a key currently exists.
+```text
+EXISTS name
+```
+Returns:
+```text
+(integer) 1
+```
+for an existing key and:
+```text
+(integer) 0
+```
+
+for a missing or expired key.
+---
+### DEL
+
+Deletes a key from the store.
+```text
+DEL name
+```
+Returns:
+```text
+(integer) 1
+```
+when a key is deleted and:
+```text
+(integer) 0
+```
+when the key does not exist or has already expired.
+---
+### Thread-Safe Store
+The original implementation used a shared map directly:
+```text
+var store = map[string]Entry{}
+```
+This becomes unsafe when multiple goroutines access the map concurrently.
+
+The key-value store was therefore refactored into a `Store` type:
+```text
+type Store struct {
+    mu   sync.RWMutex
+    data map[string]Entry
+}
+```
+The store is now responsible for both:
+
+* managing the key-value data
+* synchronizing concurrent access
+
+The command handlers no longer directly manipulate the map.
+
+Instead, the architecture is:
+```text
+Command
+   │
+   ▼
+Handler
+   │
+   ▼
+Store method
+   │
+   ▼
+Mutex
+   │
+   ▼
+Map
+
+```
+
+For example
+```text
+SET
+ │
+ ▼
+handleSet()
+ │
+ ▼
+store.Set()
+ │
+ ▼
+store.data
+```
+---
+### Synchronization
+Operations that modify the store use an exclusive lock:
+
+```text
+s.mu.Lock()
+defer s.mu.Unlock()
+```
+Expiration-aware operations also use an exclusive lock because checking an expired key can result in deleting it.
+
+For example:
+
+```text
+GET
+ │
+ ├── read entry
+ │
+ ├── check expiration
+ │
+ └── delete if expired
+```
+
+Although `RWMutex` supports concurrent readers through `RLock`, the current implementation prioritizes correctness because some operations that appear to be reads can also modify the map through lazy expiration.
+
+---
+### Concurrency Testing
+
+The store was tested directly using Go tests rather than only through redis-cli.
+
+The tests cover:
+
+* basic SET / GET operations
+* EXISTS
+* TTL
+* DEL
+* key expiration
+* resetting expiration
+* concurrent access from multiple goroutines
+
+The race detector was used to check for data races:
+
+```text
+go test -race ./...
+```
+The tests completed successfully without race detector warnings.
+---
+### What I learned
+Week 5 showed that making a data structure thread-safe is not just about adding a mutex around individual map operations.
+
+The important part is making related operations atomic.
+
+For example, expiration checking involves:
+
+```text
+lookup key
+    ↓
+check expiration
+    ↓
+possibly delete key
+```
+These operations must happen while holding the appropriate lock so another goroutine cannot modify the same key between the check and the deletion.
+
+This also led to separating the key-value store from the command handlers, giving each part a clearer responsibility.
+
+---
+# Project Structure
+`EXPIRE`
 ```text
 .
 ├── go.mod
@@ -395,26 +667,28 @@ The response layer supports:
 │
 ├── week2
 │   ├── server
+│   ├── tcp_server
+│   └── thread_pool
+│
+├── week3+4
+│   ├── server
 │   │   ├── handlers.go
 │   │   ├── parser.go
+│   │   ├── resp_parser.go
+│   │   ├── response.go
 │   │   └── server.go
-│   │
-│   ├── tcp_server
-│   │   └── main.go
-│   │
-│   └── thread_pool
+│   └── io_multiplexing
 │       └── main.go
 │
-└── week3
+└── week5
     ├── server
     │   ├── handlers.go
     │   ├── parser.go
     │   ├── resp_parser.go
     │   ├── response.go
-    │   └── server.go
-    │
-    └── io_multiplexing
-        └── main.go
+    │   ├── server.go
+    │   └── store_test.go
+    └── main.go
 ```
 
 ---
@@ -508,14 +782,12 @@ Topics covered so far include:
 
 ## Next Steps
 
-The next milestones will focus on making the Redis-like database more robust and feature complete:
+The next milestones will focus on making the server more robust and adding database features:
 
 - Per-client input buffering
 - Handling fragmented TCP requests
 - Handling multiple RESP commands per read
 - Redis command pipelining
-- Concurrent data structures
-- Thread-safe key-value storage
-- Key expiration (TTL)
+- Concurrent queue
 - Persistence
 - Replication
